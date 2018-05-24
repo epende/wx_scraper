@@ -12,12 +12,29 @@ import argparse
 from subprocess import call
 from datetime import datetime
 import urllib
+import socket
+
+# Predefined Smart Plug Commands
+# For a full list of commands, consult tplink_commands.txt
+commands = {'info'     : '{"system":{"get_sysinfo":{}}}',
+			'on'       : '{"system":{"set_relay_state":{"state":1}}}',
+			'off'      : '{"system":{"set_relay_state":{"state":0}}}',
+			'cloudinfo': '{"cnCloud":{"get_info":{}}}',
+			'wlanscan' : '{"netif":{"get_scaninfo":{"refresh":0}}}',
+			'time'     : '{"time":{"get_time":{}}}',
+			'schedule' : '{"schedule":{"get_rules":{}}}',
+			'countdown': '{"count_down":{"get_rules":{}}}',
+			'antitheft': '{"anti_theft":{"get_rules":{}}}',
+			'reboot'   : '{"system":{"reboot":{"delay":1}}}',
+			'reset'    : '{"system":{"reset":{"delay":1}}}'
+}
 
 PARSER = argparse.ArgumentParser(description='Collect and report weather')
 PARSER.add_argument('-p', '--password', metavar='password',
                     help='Weather underground password')
 PARSER.add_argument('-s', '--station', metavar='station',
                     help='Weather underground station id (e.g. KCOFORTC100)')
+
 ARGS = PARSER.parse_args()
 
 
@@ -34,6 +51,8 @@ PORT_BASEMENT=8000
 IP_AMBIENT= "10.0.0.32"
 IP_1WIRE_GAR = "10.0.0.74"
 IP_1WIRE_BSM = "10.0.0.96"
+IP_COFFEE = "10.0.0.43"
+IP_FAN = "10.0.0.71"
 PORT_OW_GAR = "9000"
 PORT_OW_BSM = "8000"
 
@@ -73,18 +92,18 @@ def push_to_wunderground(wx, station, password):
     
     url = "http://" + WUNDER_HOST + "/weatherstation/updateweatherstation.php?ID=" + station + "&PASSWORD=" \
           + password \
-          + "&tempf=" + wx['outside']['temp2'] \
-          + "&humidity=" + wx['outside']['hum1'] \
+          + "&tempf=" + str(wx['outside']['temp2']) \
+          + "&humidity=" + str(wx['outside']['hum2']) \
           + "&dewptf=" + str(wx['outside']['dewpointf']) \
-          + "&winddir=" + wx['outside']['winddir'] \
-          + "&windspeedmph=" + wx['outside']['windspeedmph'] \
-          + "&windgustmph=" + wx['outside']['windgustmph'] \
-          + "&rainin=" + wx['outside']['rainin'] \
-          + "&dailyrainin=" + wx['outside']['rainin'] \
-          + "&weeklyrainin=" + wx['outside']['weeklyrainin'] \
-          + "&monthlyrainin=" + wx['outside']['monthlyrainin'] \
-          + "&yearlyrainin=" + wx['outside']['yearlyrainin'] \
-          + "&baromin=" + wx['outside']['pressurein'] \
+          + "&winddir=" + str(wx['outside']['winddir']) \
+          + "&windspeedmph=" + str(wx['outside']['windspeedmph']) \
+          + "&windgustmph=" + str(wx['outside']['windgustmph']) \
+          + "&rainin=" + str(wx['outside']['rainin']) \
+          + "&dailyrainin=" + str(wx['outside']['rainin']) \
+          + "&weeklyrainin=" + str(wx['outside']['weeklyrainin']) \
+          + "&monthlyrainin=" + str(wx['outside']['monthlyrainin']) \
+          + "&yearlyrainin=" + str(wx['outside']['yearlyrainin']) \
+          + "&baromin=" + str(wx['outside']['pressurein']) \
           + "&softwaretype=custom4" \
           + "&action=updateraw" \
           + "&realtime=1" \
@@ -101,11 +120,59 @@ def get_value_from_url(url, patt):
     if mat:
         return mat.group(1)
     return None
+
+# Check if IP is valid
+def validIP(ip):
+	try:
+		socket.inet_pton(socket.AF_INET, ip)
+	except socket.error:
+		parser.error("Invalid IP Address.")
+	return ip 
+
+
+# Encryption and Decryption of TP-Link Smart Home Protocol
+# XOR Autokey Cipher with starting key = 171
+def encrypt(string):
+	key = 171
+	result = "\0\0\0\0"
+	for i in string: 
+		a = key ^ ord(i)
+		key = a
+		result += chr(a)
+	return result
+
+def decrypt(string):
+	key = 171 
+	result = ""
+	for i in string: 
+		a = key ^ ord(i)
+		key = ord(i) 
+		result += chr(a)
+	return result
+
+def send_tplink(ip, port, cmd):
+    # Send command and receive reply 
+    try:
+    	sock_tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    	sock_tcp.connect((ip, port))
+    	sock_tcp.send(encrypt(cmd))
+    	data = sock_tcp.recv(2048)
+    	sock_tcp.close()
+    	
+    	print "Sent:     ", cmd
+    	print "Received: ", decrypt(data[4:])
+        return decrypt(data[4:])
+    except socket.error:
+    	quit("Cound not connect to host " + ip + ":" + str(port))
+    
     
 
 def get_data(ip_ow_gar, port_ow_gar, ip_ow_bsm, port_ow_bsm, ip_amb, set_hazard_led=True):
 
     wx = {}
+
+    coffee_state = json.loads(send_tplink(IP_COFFEE, 9999, commands['info']))['system']['get_sysinfo']['relay_state']
+    fan_state = json.loads(send_tplink(IP_FAN, 9999, commands['info']))['system']['get_sysinfo']['relay_state']
 
     ow_gar_base_url = "http://" + ip_ow_gar + ":" + port_ow_gar
     ow_bsm_base_url = "http://" + ip_ow_bsm + ":" + port_ow_bsm
@@ -125,10 +192,12 @@ def get_data(ip_ow_gar, port_ow_gar, ip_ow_bsm, port_ow_bsm, ip_amb, set_hazard_
     wx['upstairs'] = {
                      'temp2': amb['weather']['indoortempf'],
                      'hum1': amb['weather']['indoorhumidity'],
+                     'fan':  fan_state,
                      }
     wx['kitchen'] = {
                      'temp1': ktemp, 
                      'hum1': khum, 
+                     'coffee': coffee_state,
                     }
     wx['outside'] = {
                      'temp1': outtemp, 
