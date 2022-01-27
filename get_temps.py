@@ -2,7 +2,6 @@
 
 import modules.ambient as ambient
 import re
-import pdb
 import requests
 import time
 import json
@@ -34,6 +33,20 @@ PARSER.add_argument('-p', '--password', metavar='password',
                     help='Weather underground password')
 PARSER.add_argument('-s', '--station', metavar='station',
                     help='Weather underground station id (e.g. KCOFORTC100)')
+PARSER.add_argument('--ip-amb', metavar='ip_amb',
+                    help='')
+PARSER.add_argument('--ip-1w-gar', metavar='ip_1w_gar',
+                    help='')
+PARSER.add_argument('--ip-1w-bsm', metavar='ip_1w_bsm',
+                    help='')
+PARSER.add_argument('--ip-coffee', metavar='ip_coffee',
+                    help='')
+PARSER.add_argument('--ip-fan', metavar='ip_fan',
+                    help='')
+PARSER.add_argument('--port-gar', metavar='port_gar',
+                    help='')
+PARSER.add_argument('--port-bsm', metavar='port_bsm',
+                    help='')
 
 ARGS = PARSER.parse_args()
 
@@ -47,18 +60,14 @@ if WUNDER_STN is None or WUNDER_PASS is None:
 PORT_KITCHEN=9000
 PORT_BASEMENT=8000
 
-IP_AMBIENT= "44.20.8.32"
-IP_1WIRE_GAR = "44.20.6.55"
-IP_1WIRE_BSM = "44.20.6.22"
-IP_COFFEE = "44.20.6.77"
-IP_FAN = "44.20.6.29"
-PORT_OW_GAR = "8000"
-PORT_OW_BSM = "8000"
+IP_AMBIENT = ARGS.ip_amb
+IP_1WIRE_GAR = ARGS.ip_1w_gar
+IP_1WIRE_BSM = ARGS.ip_1w_bsm
+IP_COFFEE = ARGS.ip_coffee
+IP_FAN = ARGS.ip_fan
+PORT_OW_GAR = ARGS.port_gar
+PORT_OW_BSM = ARGS.port_bsm
 
-#LED_ON_URL = "http://" + IP_1WIRE_GAR + ":" + PORT_OW_GAR + \
-#             "/uncached/7E.B92E00001000/EDS0068/LED?control=2"
-#LED_OFF_URL = "http://" + IP_1WIRE_GAR + ":" + PORT_OW_GAR + \
-#             "/uncached/7E.B92E00001000/EDS0068/LED?control=0"
 WIND_SPEED_THRESH = 20
 WIND_GUST_THRESH = 30
 DATA_FILE = "/var/www/html/newtemps.json"
@@ -165,9 +174,7 @@ def send_tplink(ip, port, cmd):
     except socket.error:
         quit("Cound not connect to host " + ip + ":" + str(port))
     
-    
 
-#def get_data(ip_ow_bsm, port_ow_bsm, ip_amb, set_hazard_led=True):
 def get_data(ip_ow_gar, port_ow_gar, ip_ow_bsm, port_ow_bsm, ip_amb, set_hazard_led=True):
 
     wx = {}
@@ -224,9 +231,6 @@ def get_data(ip_ow_gar, port_ow_gar, ip_ow_bsm, port_ow_bsm, ip_amb, set_hazard_
                      'dewpointf': get_dew_point_f(amb['weather']['tempf'], amb['weather']['humidity'])
                     }
 
-#    if ( set_hazard_led ):
-#        set_hazard_led(wx['outside']['windspeedmph'],
-#                       wx['outside']['windgustmph'])
 
     push_to_wunderground(wx, WUNDER_STN, WUNDER_PASS)
     return wx
@@ -239,7 +243,6 @@ def set_hazard_led(wind_speed, wind_gust):
     requests.get(LED_OFF_URL, verify=False)
 
 
-#json_data = json.dumps(get_data(IP_1WIRE_BSM, PORT_OW_BSM, IP_AMBIENT))
 json_data = json.dumps(get_data(IP_1WIRE_GAR, PORT_OW_GAR, IP_1WIRE_BSM, PORT_OW_BSM, IP_AMBIENT))
 with open(DATA_FILE, 'r') as original: data = original.read()
 with open(DATA_FILE, 'w') as modified: modified.write(json_data + "\n" + data)
