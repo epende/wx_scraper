@@ -1,5 +1,6 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
+# sudo apt install python3-lxml (Debian)
 from lxml import html
 import argparse
 import json
@@ -88,8 +89,8 @@ for name, value in zip(names, values):
         else:
             pairs[name] = value
 
-for name, value in pairs.iteritems():
+for name, value in pairs.items():
     if re.search(r'--', value):
         pairs[name] = None
 
-print json.dumps(weather)
+print(json.dumps(weather))
